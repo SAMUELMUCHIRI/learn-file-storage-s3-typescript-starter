@@ -63,6 +63,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Media type not provided");
   }
   const imagedata = await thumbnail_file.arrayBuffer();
+  const imageBuffer = Buffer.from(imagedata);
+  const imageBufferString = imageBuffer.toString("base64");
+  const ImageDataUrl = `data:${media_Type};base64,${imageBufferString}`;
   const video_metadata = getVideo(cfg.db, videoId);
   if (!video_metadata) {
     throw new NotFoundError("Couldn't find video");
@@ -72,13 +75,13 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("You are not the owner of this video");
   }
 
-  videoThumbnails.set(videoId, {
+  /*videoThumbnails.set(videoId, {
     data: imagedata,
     mediaType: media_Type,
-  });
+  });*/
 
-  const url = `http://localhost:${cfg.port}/api/thumbnails/${videoId}`;
-  video_metadata.thumbnailURL = url;
+  //const url = `http://localhost:${cfg.port}/api/thumbnails/${videoId}`;
+  video_metadata.thumbnailURL = ImageDataUrl;
 
   const update_Video = updateVideo(cfg.db, video_metadata);
 
