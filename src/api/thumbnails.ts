@@ -59,9 +59,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Thumbnail exceeds maximum size");
   }
 
+  const allowedTypes = ["image/jpeg", "image/png"];
   const media_Type = thumbnail_file.type;
-  if (!media_Type) {
-    throw new BadRequestError("Media type not provided");
+  if (!media_Type || !allowedTypes.includes(media_Type)) {
+    throw new BadRequestError("Media type not provided or not allowed");
   }
   const imagedata = await thumbnail_file.arrayBuffer();
 
