@@ -4,6 +4,7 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import path from "path";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -63,9 +64,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Media type not provided");
   }
   const imagedata = await thumbnail_file.arrayBuffer();
-  const imageBuffer = Buffer.from(imagedata);
-  const imageBufferString = imageBuffer.toString("base64");
-  const ImageDataUrl = `data:${media_Type};base64,${imageBufferString}`;
+
   const video_metadata = getVideo(cfg.db, videoId);
   if (!video_metadata) {
     throw new NotFoundError("Couldn't find video");
@@ -75,13 +74,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("You are not the owner of this video");
   }
 
-  /*videoThumbnails.set(videoId, {
-    data: imagedata,
-    mediaType: media_Type,
-  });*/
+  const imagePath = `/${videoId}.${media_Type.split("/")[1]}`;
+  const mainPath = path.join(cfg.assetsRoot, imagePath);
+  await Bun.write(mainPath, imagedata);
 
-  //const url = `http://localhost:${cfg.port}/api/thumbnails/${videoId}`;
-  video_metadata.thumbnailURL = ImageDataUrl;
+  video_metadata.thumbnailURL = `http://localhost:${cfg.port}/assets${imagePath}`;
 
   const update_Video = updateVideo(cfg.db, video_metadata);
 
