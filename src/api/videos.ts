@@ -45,14 +45,49 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const videoPath = `/${randomBytes(32).toString("base64url")}.${media_Type.split("/")[1]}`;
   const mainPath = path.join(cfg.assetsRoot, videoPath);
   await Bun.write(mainPath, video_data);
+  const Video_AspectRatio = await getVideoAspectRatio(mainPath);
+  const Video_URL = `/${Video_AspectRatio}${videoPath}`;
 
-  const s3file: S3File = cfg.s3Client.file(videoPath, { type: media_Type });
+  const s3file: S3File = cfg.s3Client.file(Video_URL, { type: media_Type });
   const videoinSystem = Bun.file(mainPath);
   await Bun.write(s3file, videoinSystem);
 
-  video_metadata.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com${videoPath}`;
+  video_metadata.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com${Video_URL}`;
   await videoinSystem.delete();
 
   const update_Video = updateVideo(cfg.db, video_metadata);
   return respondWithJSON(200, video_metadata);
+}
+
+export async function getVideoAspectRatio(filePath: string) {
+  const proc = Bun.spawn([
+    "ffprobe",
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_entries",
+    "stream=width,height",
+    "-of",
+    "json",
+    filePath,
+  ]);
+  const stdoutText = await new Response(proc.stdout).text();
+  const stderrText = await new Response(proc.stderr).text();
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error(`ffprobe exited with code ${stderrText}`);
+  }
+
+  const result = JSON.parse(stdoutText);
+  const width = result.streams[0].width;
+  const height = result.streams[0].height;
+  const aspectRatio = width / height;
+  if (aspectRatio > 1) {
+    return "landscape";
+  }
+  if (aspectRatio < 1) {
+    return "portrait";
+  }
+  return "other";
 }
