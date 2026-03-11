@@ -5,6 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import path from "path";
+import { randomBytes } from "crypto";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -75,7 +76,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("You are not the owner of this video");
   }
 
-  const imagePath = `/${videoId}.${media_Type.split("/")[1]}`;
+  const imagePath = `/${randomBytes(32).toString("base64url")}.${media_Type.split("/")[1]}`;
   const mainPath = path.join(cfg.assetsRoot, imagePath);
   await Bun.write(mainPath, imagedata);
 
