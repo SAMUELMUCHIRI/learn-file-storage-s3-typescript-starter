@@ -1,9 +1,10 @@
 import { respondWithJSON } from "./json";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { getVideo, updateVideo } from "../db/videos";
+import type { Video } from "../db/videos";
 import { getBearerToken, validateJWT } from "../auth";
 import { type ApiConfig } from "../config";
-import type { BunRequest, S3File } from "bun";
+import type { BunRequest, S3File, s3 } from "bun";
 import path from "path";
 import { randomBytes } from "crypto";
 
@@ -46,7 +47,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const mainPath = path.join(cfg.assetsRoot, videoPath);
   await Bun.write(mainPath, video_data);
   const Video_AspectRatio = await getVideoAspectRatio(mainPath);
-  const Video_URL = `/${Video_AspectRatio}${videoPath}`;
+  const Video_URL = `${Video_AspectRatio}${videoPath}`;
   const processedVideoPath = await processVideoForFastStart(mainPath);
   const original_videoinSystem = Bun.file(mainPath);
   await original_videoinSystem.delete();
@@ -55,11 +56,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const s3file: S3File = cfg.s3Client.file(Video_URL, { type: media_Type });
   await Bun.write(s3file, processed_videoinSystem);
 
-  video_metadata.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com${Video_URL}`;
+  video_metadata.videoURL = `${Video_URL}`;
   await processed_videoinSystem.delete();
 
-  const update_Video = updateVideo(cfg.db, video_metadata);
-  return respondWithJSON(200, video_metadata);
+  const updatedVideo = await updateVideo(cfg.db, video_metadata);
+  const signedVideo = await dbVideoToSignedVideo(cfg, video_metadata);
+  return respondWithJSON(200, signedVideo);
 }
 
 export async function getVideoAspectRatio(filePath: string) {
@@ -120,4 +122,28 @@ export async function processVideoForFastStart(
   }
 
   return outputFilePath;
+}
+
+export async function generatePresignedURL(
+  cfg: ApiConfig,
+  key: string,
+  expireTime: number,
+): Promise<string> {
+  const upload = cfg.s3Client.presign(key, {
+    expiresIn: expireTime,
+  });
+  return upload;
+}
+
+export async function dbVideoToSignedVideo(
+  cfg: ApiConfig,
+  video: Video,
+): Promise<Video> {
+  const videoURL = video.videoURL;
+  if (!videoURL) {
+    throw new Error("videoURL is required");
+  }
+  const signedVideoURL = await generatePresignedURL(cfg, videoURL, 3600);
+  video.videoURL = signedVideoURL;
+  return video;
 }
